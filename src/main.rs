@@ -14,20 +14,23 @@ unsafe fn HardFault(_frame: &cortex_m_rt::ExceptionFrame) -> ! {
     semihosting::process::exit(1);
 }
 
+use core::sync::atomic::{AtomicU32, Ordering};
 use cortex_m::interrupt::Mutex;
+use stm32f4xx_hal::gpio::Speed;
+use stm32f4xx_hal::hal::spi::{Mode, Phase, Polarity};
+use stm32f4xx_hal::spi::Spi;
 use core::cell::RefCell;
 use micromath::{F32Ext};
-
 use stm32f4xx_hal::prelude::*;
 use stm32f4xx_hal::i2s::I2s;
 use stm32f4xx_hal::i2s::stm32_i2s_v12x::transfer::{Transmit, Master, Philips};
 use stm32f4xx_hal::i2s::stm32_i2s_v12x::driver::{I2sDriverConfig, I2sDriver, DataFormat::Data16Channel16};
 use stm32f4xx_hal::interrupt::{DMA1_STREAM4};
-use stm32f4xx_hal::pac::{Peripherals, interrupt, DMA1, SPI2, NVIC};
+use stm32f4xx_hal::pac::{DMA1, NVIC, Peripherals, SPI1, SPI2, interrupt};
 use stm32f4xx_hal::rcc::Config;
- use stm32f4xx_hal::adc::{Adc};
+use stm32f4xx_hal::adc::{Adc};
 use stm32f4xx_hal::adc::config::AdcConfig;
-use stm32f4xx_hal::dma::{StreamsTuple, Transfer, Stream4, MemoryToPeripheral};
+use stm32f4xx_hal::dma::{StreamsTuple, Transfer, Stream4, MemoryToPeripheral, CurrentBuffer};
 use stm32f4xx_hal::dma::config::{DmaConfig, Priority};
 
 const SAMPLE_RATE: u32 = 44100;
@@ -43,12 +46,16 @@ const DEBOUNCE_SAMPLES: u32 = 441;
 
 const ROOT_FREQ: f32 = 261.626; // C4
 
-const PENTATONIC: [f32; 5] = [1.0, 1.122462, 1.259921, 1.498307, 1.681793];
+// equal temperament
+// const PENTATONIC: [f32; 5] = [1.0, 1.122462, 1.259921, 1.498307, 1.681793];
+
+// just intonation
+const PENTATONIC: [f32; 5] = [1.0, 9.0 / 8.0, 5.0 / 4.0, 3.0 / 2.0, 5.0 / 3.0];
 const PENTA_LEN: usize = PENTATONIC.len();
 const ANGLE_MAX: i32 = 8192;
 const OCTAVES_PER_CYCLE: i32 = 2;
-const OCTAVE_MIN: i32 = -3;
-const OCTAVE_MAX: i32 = 3;
+const OCTAVE_MIN: i32 = -10;
+const OCTAVE_MAX: i32 = 10;
 
 #[derive(Copy, Clone)]
 struct Osc {wave_idx: usize, phase: u32, phase_inc: u32, amplitude: f32 }
@@ -59,6 +66,12 @@ static AUDIO: Mutex<RefCell<Osc>> = Mutex::new(RefCell::new(Osc {
     phase_inc: 42_852_281, // A440
     amplitude: 0.0,
 }));
+
+// Error handling counters
+// audio handler couldn't service in time
+static UNDERRUN_COUNT: AtomicU32 = AtomicU32::new(0);
+// audio interrupt happened with no transfer-complete flag
+static SPURIOUS_IRQ_COUNT: AtomicU32 = AtomicU32::new(0);
 
 // combine phase shifted triangle waves into one
 fn angle(val1: u16, val2: u16) -> i32 {
@@ -200,6 +213,8 @@ fn main() -> ! {
         *b = 0;
     }
 
+    let sharp_buf = cortex_m::singleton!(: [u8; 1024] = [0; 1024]).unwrap();
+
     let mut cp = cortex_m::Peripherals::take().unwrap();
     let dp = Peripherals::take().unwrap();
 
@@ -227,9 +242,9 @@ fn main() -> ! {
     let i2s_driver_config = I2sDriverConfig::new_master().transmit().standard(Philips).data_format(Data16Channel16).request_frequency(SAMPLE_RATE);
     let mut i2s_driver = I2sDriver::new(i2s, i2s_driver_config);
     i2s_driver.set_tx_dma(true);
-    let tx_stream = StreamsTuple::new(dp.DMA1, &mut rcc).4;
+    let dma1_stream = StreamsTuple::new(dp.DMA1, &mut rcc);
     let i2s_config = DmaConfig::default().memory_increment(true).double_buffer(true).transfer_complete_interrupt(true).priority(Priority::VeryHigh);
-    let mut tx_transfer = Transfer::init_memory_to_peripheral(tx_stream, i2s_driver, audio_buf_1, Some(audio_buf_2), i2s_config);
+    let mut tx_transfer = Transfer::init_memory_to_peripheral(dma1_stream.4, i2s_driver, audio_buf_1, Some(audio_buf_2), i2s_config);
     tx_transfer.start(|i2s| i2s.enable());
 
     cortex_m::interrupt::free(|cs| *AUDIO_TRANSFER.borrow(cs).borrow_mut() = Some(tx_transfer));
@@ -239,15 +254,18 @@ fn main() -> ! {
         NVIC::unmask(DMA1_STREAM4);
     }
 
-    // let sharp_pins = (
-    //     Some(gpiob.pb3.into_alternate().speed(Speed::VeryHigh).internal_pull_up(true)),// sck
-    //     SPI3::NoMiso, // miso
-    //     Some(gpiob.pb5.into_alternate().speed(Speed::VeryHigh))); // mosi
-    // let sharp_mode = Mode {
-    //     polarity: Polarity::IdleLow,
-    //     phase: Phase::CaptureOnFirstTransition,
-    // };
-    // let mut sharp = Spi::new(dp.SPI3, sharp_pins, sharp_mode, 300.Hz(), &mut rcc);
+    let sharp_pins = (
+        Some(gpiob.pb3.into_alternate().speed(Speed::VeryHigh).internal_pull_up(true)),// sck
+        SPI1::NoMiso, // miso
+        Some(gpiob.pb5.into_alternate().speed(Speed::VeryHigh))); // mosi
+    let sharp_mode = Mode {
+        polarity: Polarity::IdleLow,
+        phase: Phase::CaptureOnFirstTransition,
+    };
+    let sharp = Spi::new(dp.SPI1, sharp_pins, sharp_mode, 2.MHz(), &mut rcc);
+    let dma2_stream = StreamsTuple::new(dp.DMA2, &mut rcc);
+    let sharp_config = DmaConfig::default().memory_increment(true).double_buffer(false).transfer_complete_interrupt(false).priority(Priority::High);
+    let sharp_transfer = Transfer::init_memory_to_peripheral(dma2_stream.3, sharp.use_dma().tx(), sharp_buf, None, sharp_config);
 
     // phase increment
     let phase_per_hz = (1u64 << 32) as f32 / SAMPLE_RATE as f32;
@@ -261,16 +279,17 @@ fn main() -> ! {
     let mut prev_mapped: i32 = angle(seed1, seed2);
     let mut octave: i32 = 0;
 
-    // let mut phase: u32 = 0;
-    let step0 = prev_mapped.clamp(0, ANGLE_MAX - 1) * (OCTAVES_PER_CYCLE * PENTA_LEN as i32) / ANGLE_MAX;
-    let mut phase_inc: u32 = base_inc[(step0 % PENTA_LEN as i32) as usize] << (step0 / PENTA_LEN as i32);
+    let mut phase_inc: u32;
     let mut n: u32 = 0;
 
     let mut wave_idx: usize = 0;
     let mut button_pressed = button.is_low();
     let mut button_debounce: u32 = 0;
 
-    let mut amplitude: f32 = 0.0;
+    let mut amplitude: f32;
+
+    let mut underrun_count: u32 = UNDERRUN_COUNT.load(Ordering::Relaxed);
+    let mut spurious_count: u32 = SPURIOUS_IRQ_COUNT.load(Ordering::Relaxed);
 
     loop {
 
@@ -300,6 +319,18 @@ fn main() -> ! {
 
             let mapped = angle(val1, val2);
 
+            let new_underrun = UNDERRUN_COUNT.load(Ordering::Relaxed);
+            if new_underrun != underrun_count {
+                defmt::println!("Audio underrun: {}", new_underrun);
+            }
+            underrun_count = new_underrun;
+
+            let new_spurious = SPURIOUS_IRQ_COUNT.load(Ordering::Relaxed);
+            if new_spurious != spurious_count {
+                defmt::println!("Audio spurious irq: {}", new_spurious);
+            }
+            spurious_count = new_spurious;
+
             // detec rotation wrap
             let delta = mapped - prev_mapped;
             if delta < -(ANGLE_MAX / 2) {
@@ -314,19 +345,19 @@ fn main() -> ! {
             let eff = (octave + step / PENTA_LEN as i32).clamp(OCTAVE_MIN, OCTAVE_MAX);
             let base = base_inc[degree];
             phase_inc = if eff >= 0 { base << eff } else { base >> (-eff) };
+            cortex_m::interrupt::free(|cs| {
+                let mut osc = AUDIO.borrow(cs).borrow_mut();
+                osc.wave_idx = wave_idx;
+                osc.phase_inc = phase_inc;
+                osc.amplitude = amplitude;
+            });
         }
 
-        cortex_m::interrupt::free(|cs| {
-            let mut osc = AUDIO.borrow(cs).borrow_mut();
-            osc.wave_idx = wave_idx;
-            osc.phase_inc = phase_inc;
-            osc.amplitude = amplitude;
-        });
     }
 }
 
 fn fill(buf: &mut [u16; BLOCK_WORDS], osc: &mut Osc) {
-    for i in 0..64 {
+    for i in 0..(BLOCK_WORDS / 2) {
         let table = WAVES[osc.wave_idx];
         let idx = (osc.phase >> FRAC_BITS) as usize;
         let frac = (osc.phase & FRAC_MASK) as f32 / (1u32 << FRAC_BITS) as f32;
@@ -342,16 +373,32 @@ fn fill(buf: &mut [u16; BLOCK_WORDS], osc: &mut Osc) {
 #[interrupt]
 fn DMA1_STREAM4() {
     static mut TRANSFER: Option<I2sDma> = None;
+    static mut LAST_FILLED: Option<CurrentBuffer> = None;
+
     let mut osc = cortex_m::interrupt::free(|cs| *AUDIO.borrow(cs).borrow());
     let transfer = TRANSFER.get_or_insert_with(|| {
         cortex_m::interrupt::free(|cs| AUDIO_TRANSFER.borrow(cs).replace(None).unwrap())
     });
-    unsafe {
-        let _ = transfer.next_transfer_with(|buf, _| {
+    let filled = unsafe {
+        transfer.next_transfer_with(|buf, half| {
             fill(buf, &mut osc);
-            (buf, ())
-        });
+            (buf, half)
+        })
+    };
+
+    match filled {
+        Ok(half) => {
+            // catch the same buffer half running twice which means we didn't service a block
+            if *LAST_FILLED == Some(half) {
+                UNDERRUN_COUNT.fetch_add(1, Ordering::Relaxed);
+            }
+            *LAST_FILLED = Some(half);
+        }
+        Err(_) => {
+            SPURIOUS_IRQ_COUNT.fetch_add(1, Ordering::Relaxed);
+        }
     }
+
     cortex_m::interrupt::free(|cs| AUDIO.borrow(cs).borrow_mut().phase = osc.phase);
 }
 

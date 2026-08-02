@@ -1,19 +1,15 @@
 [package]
 authors = ["Jagi Natarajan <jagnat4000@gmail.com>"]
-name = "synth_pill"
+name = "daisy_pot"
 edition = "2024"
 version = "0.1.0"
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7"
-defmt = "1.0"
-defmt-rtt = "1.0"
-panic-probe = { version = "1.0", features = ["print-defmt"] }
-semihosting = "0.1.20"
 micromath = "2.1.0"
 critical-section = "1.2"
-stm32f4xx-hal = { version = "0.23.0", features = ["stm32f411", "i2s"] }
+stm32h7xx-hal = { version = "0.16", features = ["stm32h750v", "rt"] }
 
 # cargo build/run
 [profile.dev]
@@ -30,8 +26,7 @@ codegen-units = 1
 opt-level = 's'
 # trade compile speed for slightly better optimisations
 codegen-units = 1
-# Use Link Time Optimisations to further inline things across
-# crates
+# Use Link Time Optimisations to further inline things across crates
 lto = 'fat'
 # Leave the debug symbols in (default is no debug info)
 debug = 2

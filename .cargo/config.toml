@@ -1,14 +1,19 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = ["probe-rs", "run", "--chip", "STM32F411CE", "--log-format=oneline"]
+# The ROM bootloader takes a raw binary, so the ELF is converted first. Under `sh -c`
+# cargo's ELF path arrives as $0, not $1. Alt setting 0 is internal flash; the other
+# alt settings are option bytes.
+runner = ["sh", "-c", "rust-objcopy -O binary $0 /tmp/daisy_pot.bin && dfu-util -a 0 -s 0x08000000:leave -D /tmp/daisy_pot.bin"]
 
 rustflags = [
   "-C", "linker=flip-link",
   "-C", "link-arg=-Tlink.x",
-  "-C", "link-arg=-Tdefmt.x",
   # This is needed if your flash or ram addresses are not aligned to 0x10000 in memory.x
   # See https://github.com/rust-embedded/cortex-m-quickstart/pull/95
   "-C", "link-arg=--nmagic",
+  # thumbv7em-none-eabihf assumes the M4's single-precision FPU. The M7 in the H750 has
+  # FPv5-D16, so f64 is hardware rather than a soft-float call.
+  "-C", "target-cpu=cortex-m7",
 ]
 
 [build]
-target = "thumbv7em-none-eabihf" # Cortex-M4F (STM32F411)
+target = "thumbv7em-none-eabihf" # Cortex-M7F (STM32H750)

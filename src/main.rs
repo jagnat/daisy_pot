@@ -3,7 +3,8 @@
 
 use cortex_m::asm;
 use cortex_m_rt::entry;
-use embassy_stm32;
+use embassy_stm32::pac::mdma::vals::Trgm::BLOCK;
+use embassy_stm32::{self, bind_interrupts, gpio, dma, sai, peripherals};
 use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::time::{Hertz};
 use embassy_stm32::rcc;
@@ -81,22 +82,60 @@ fn pot_vol_to_linear(val: f32) -> f32 {
 // >;
 // static AUDIO_TRANSFER: Mutex<RefCell<Option<I2sDma>>> = Mutex::new(RefCell::new(None));
 
+bind_interrupts!(struct Irqs {
+    DMA1_STREAM0 => dma::InterruptHandler<peripherals::DMA1_CH0>;
+});
+
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let mut cfg = embassy_stm32::Config::default();
-    util::config_pll(&mut cfg);
+    util::config_plls(&mut cfg);
     let p = embassy_stm32::init(cfg);
     panic::publish_sys_hz(rcc::clocks(&p.RCC).sys.to_hertz().unwrap().0);
     util::assert_pll(&p);
 
+    let mut cp = cortex_m::Peripherals::take().unwrap();
+    cp.SCB.enable_icache();
+
     let mut led = Output::new(p.PC7, Level::High, Speed::Medium);
 
-    loop {
-        led.set_high();
-        Timer::after_millis(1000).await;
+    let (_, sai2_b) = sai::split_subblocks(p.SAI2);
 
-        led.set_low();
-        Timer::after_millis(1000).await;
+    let mut sai2_tx_cfg = sai::Config::default();
+    sai2_tx_cfg.clock_strobe = sai::ClockStrobe::Falling;
+    sai2_tx_cfg.bit_order = sai::BitOrder::MsbFirst;
+    sai2_tx_cfg.nodiv = true;
+    // 24.576 mhz / 16 = 1.536mhz, which is 32 bits per 48khz
+    sai2_tx_cfg.master_clock_divider = sai::MasterClockDivider::DIV16;
+
+    let tx_buf = cortex_m::singleton!(: [u32; BLOCK_WORDS] = [0; BLOCK_WORDS] ).unwrap();
+
+    let mut sai_tx = sai::Sai::new_asynchronous(
+        sai2_b,
+        p.PA2,
+        p.PA0,
+        p.PG9,
+        p.DMA1_CH0,
+        tx_buf,
+        Irqs,
+        sai2_tx_cfg);
+
+    let mut test_tone = [0u32; BLOCK_WORDS];
+
+    for frame in 0..SAMPLES_PER_BLOCK {
+        let sample: i16 = if frame < SAMPLES_PER_BLOCK / 2 { 2000 } else {-2000};
+        let word = sample as u16 as u32;
+        test_tone[frame * 2] = word;
+        test_tone[frame * 2 + 1] = word;
+    }
+
+    loop {
+        sai_tx.write(&test_tone).await;
+        // led.set_high();
+        // Timer::after_millis(1000).await;
+        //
+        // led.set_low();
+        // Timer::after_millis(1000).await;
     }
     
     // let audio_buf_1 = cortex_m::singleton!(: [u32; BLOCK_WORDS] = [0; BLOCK_WORDS]).unwrap();

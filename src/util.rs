@@ -1,6 +1,6 @@
-use embassy_stm32::{rcc, Peripherals, Config, time::{Hertz}};
+use embassy_stm32::{pac, rcc, Peripherals, Config, time::{Hertz}};
 
-pub fn config_pll(cfg: &mut Config) {
+pub fn config_plls(cfg: &mut Config) {
     cfg.rcc.hse = Some(rcc::Hse { freq: Hertz::mhz(16), mode:rcc::HseMode::Oscillator} );
     cfg.rcc.voltage_scale = rcc::VoltageScale::Scale0;
 
@@ -24,6 +24,20 @@ pub fn config_pll(cfg: &mut Config) {
     cfg.rcc.apb2_pre = rcc::APBPrescaler::DIV2;
     cfg.rcc.apb3_pre = rcc::APBPrescaler::DIV2;
     cfg.rcc.apb4_pre = rcc::APBPrescaler::DIV2;
+
+    // use pll 3 for sai2
+    cfg.rcc.mux.sai23sel = pac::rcc::vals::Saisel::PLL3_P;
+    // for audio at 48khz we need a smaller multiple of it for SAI
+    // so we use pll3
+    // 16mhz / 5 * 192  / 25 = 24.576 mhz = 512 * 48 khz
+    cfg.rcc.pll3 = Some(rcc::Pll {
+        source: rcc::PllSource::HSE,
+        prediv: rcc::PllPreDiv::DIV5,
+        mul: rcc::PllMul::MUL192,
+        divp: Some(rcc::PllDiv::DIV25),
+        divq: None,
+        divr: None,
+    });
 }
 
 pub fn assert_pll(p: &Peripherals) {
@@ -32,3 +46,7 @@ pub fn assert_pll(p: &Peripherals) {
     assert_eq!(clocks.hclk1.to_hertz(), Some(Hertz::mhz(240)));
     assert_eq!(clocks.pclk1.to_hertz(), Some(Hertz::mhz(120)));
 }
+
+pub fn config_sai2() {
+}
+

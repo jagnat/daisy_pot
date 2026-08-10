@@ -4,7 +4,28 @@ pub const TABLE_SIZE: usize = 1 << TABLE_BITS;
 pub const FRAC_BITS: u32 = 32 - TABLE_BITS;
 pub const FRAC_MASK: u32 = (1 << FRAC_BITS) - 1;
 
-pub const WAVES: [&[f32; TABLE_SIZE]; 3] = [&SINE, &SQUARE, &SAW];
+#[derive(Clone, Copy)]
+pub enum Waveform {
+    Sine,
+    Square,
+    Saw,
+}
+
+pub fn get_wave_table(wave: Waveform) -> &'static [f32; TABLE_SIZE] {
+    match wave {
+        Waveform::Sine => &SINE,
+        Waveform::Square => &SQUARE,
+        Waveform::Saw => &SAW,
+    }
+}
+
+pub fn next_wave(wave: Waveform) -> Waveform {
+    match wave {
+        Waveform::Sine => Waveform::Square,
+        Waveform::Square => Waveform::Saw,
+        Waveform::Saw => Waveform::Sine,
+    }
+}
 
 pub const SINE: [f32; TABLE_SIZE] = [
     0.0, 0.02454123, 0.04906767, 0.07356456, 0.09801714, 0.1224107, 0.1467305, 0.1709619,

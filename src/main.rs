@@ -47,10 +47,10 @@ const OCTAVE_MAX: i32 = 10;
 
 #[derive(Copy, Clone)]
 struct Osc {
-    wave_idx: usize,
+    wave: Waveform,
     phase: u32,
     phase_inc: u32,
-    amplitude: f32
+    amplitude: f32,
 }
 
 type SaiDriver = sai::Sai<'static, peripherals::SAI2, u32>;
@@ -129,11 +129,7 @@ async fn main(_spawner: Spawner) {
     _spawner.spawn(input_task(adc1, p.PC0, p.PA3, p.PB1, p.PB14).unwrap());
 
     loop {
-        led.set_high();
-        Timer::after_millis(1000).await;
-
-        led.set_low();
-        Timer::after_millis(1000).await;
+        core::future::pending::<()>().await;
     }
     
     // // sharp cs: pg10, sck: pg11, mosi: pb5
@@ -159,51 +155,9 @@ async fn main(_spawner: Spawner) {
     // sharp_spi.inner_mut().cfg2.modify(|_, w| w.lsbfrst().lsbfirst());
     // let mut sharp_spi = sharp_spi.enable();
     //
-    // // continuous pot pc0 / pa3
-    // let mut pot1 = gpioc.pc0.into_analog();
-    // let mut pot2 = gpioa.pa3.into_analog();
-    // // vol pot pb1
-    // let mut volpot = gpiob.pb1.into_analog();
-    // // btn pb14
-    // let button = gpiob.pb14.into_pull_up_input();
-    // let mut delay = delay::Delay::new(cp.SYST, ccdr.clocks);
-    //
-    // let mut adc = adc::Adc::adc1(
-    //     dp.ADC1,
-    //     4.MHz(),
-    //     &mut delay,
-    //     ccdr.peripheral.ADC12,
-    //     &ccdr.clocks,
-    // )
-    // .enable();
-    // adc.set_resolution(adc::Resolution::TwelveBit);
-    // adc.set_sample_time(adc::AdcSampleTime::T_64);
-    //
-    // let mut led = gpioc.pc7.into_push_pull_output();
-    //
     // let mut vcom_tim = dp.TIM2.timer(1.Hz(), ccdr.peripheral.TIM2, &ccdr.clocks);
     //
     // let mut col: bool = false;
-    //
-    // let seed1: u32 = adc.read(&mut pot1).unwrap();
-    // let seed2: u32 = adc.read(&mut pot2).unwrap();
-    // let seed1 = seed1 as u16;
-    // let seed2 = seed2 as u16;
-    // let mut prev_mapped: i32 = angle(seed1, seed2);
-    // let mut octave: i32 = 0;
-    //
-    // let phase_per_hz = (1u64 << 32) as f32 / SAMPLE_RATE.raw() as f32;
-    // let mut base_inc = [0u32; PENTA_LEN];
-    // for i in 0..PENTA_LEN {
-    //     base_inc[i] = (ROOT_FREQ * PENTATONIC[i] * phase_per_hz) as u32;
-    // }
-    //
-    // let mut phase_inc: u32 = 0;
-    // let mut n: u32 = 0;
-    //
-    // let mut wave_idx: usize = 0;
-    // let mut button_pressed = button.is_low();
-    // let mut button_debounce: u32 = 0;
     //
     // let mut amplitude: f32;
     // loop {
@@ -221,60 +175,11 @@ async fn main(_spawner: Spawner) {
     //             sharp_spi.write(b).unwrap();
     //         }
     //     }
-    //     let raw_pressed = button.is_low();
-    //     if raw_pressed != button_pressed {
-    //         button_debounce += 1;
-    //         if button_debounce >= DEBOUNCE_SAMPLES {
-    //             button_pressed = raw_pressed;
-    //             button_debounce = 0;
-    //             if button_pressed {
-    //                 wave_idx = (wave_idx + 1) % WAVES.len();
-    //             }
-    //         }
-    //     } else {
-    //         button_debounce = 0;
-    //     }
-    //
-    //     n = n.wrapping_add(1);
-    //     if n & 0xFF == 0 {
-    //         let val1: u32 = adc.read(&mut pot1).unwrap();
-    //         let val2: u32 = adc.read(&mut pot2).unwrap();
-    //         let val3: u32 = adc.read(&mut volpot).unwrap();
-    //         let val1 = val1 as u16;
-    //         let val2 = val2 as u16;
-    //         let val3 = val3 as u16;
-    //         amplitude = pot_vol_to_linear(val3 as f32);
-    //         amplitude *= 32767.0;
-    //
-    //         let mapped = angle(val1, val2);
-    //
-    //         // detec rotation wrap
-    //         let delta = mapped - prev_mapped;
-    //         if delta < -(ANGLE_MAX / 2) {
-    //             octave = (octave + OCTAVES_PER_CYCLE).min(OCTAVE_MAX);
-    //         } else if delta > ANGLE_MAX / 2 {
-    //             octave = (octave - OCTAVES_PER_CYCLE).max(OCTAVE_MIN);
-    //         }
-    //         prev_mapped = mapped;
-    //
-    //         let step = mapped.clamp(0, ANGLE_MAX - 1) * (OCTAVES_PER_CYCLE * PENTA_LEN as i32) / ANGLE_MAX;
-    //         let degree = (step % PENTA_LEN as i32) as usize;
-    //         let eff = (octave + step / PENTA_LEN as i32).clamp(OCTAVE_MIN, OCTAVE_MAX);
-    //         let base = base_inc[degree];
-    //         phase_inc = if eff >= 0 { base << eff } else { base >> (-eff) };
-    //         cortex_m::interrupt::free(|cs| {
-    //             let mut osc = AUDIO.borrow(cs).borrow_mut();
-    //             osc.wave_idx = wave_idx;
-    //             osc.phase_inc = phase_inc;
-    //             osc.amplitude = amplitude;
-    //         });
-    //     }
-    // }
 }
 
 fn fill(buf: &mut [u32; BLOCK_WORDS], osc: &mut Osc) {
     for i in 0..(BLOCK_WORDS / 2) {
-        let table = WAVES[osc.wave_idx];
+        let table = get_wave_table(osc.wave);
         let idx = (osc.phase >> FRAC_BITS) as usize;
         let frac = (osc.phase & FRAC_MASK) as f32 / (1u32 << FRAC_BITS) as f32;
         let a = table[idx];
@@ -290,28 +195,61 @@ fn fill(buf: &mut [u32; BLOCK_WORDS], osc: &mut Osc) {
 #[embassy_executor::task]
 async fn audio_task(mut sai: SaiDriver) {
     let mut test_tone = [0u32; BLOCK_WORDS];
+    let mut phase_inc: u32;
+    let mut prev_ang: f32 = 0.0;
+        
     let mut input = InputState {
         contpot: 0.0,
         volpot: 0.0,
         btn_pressed: false
     };
 
+    let mut osc = Osc {
+        wave: Waveform::Sine,
+        phase: 0,
+        phase_inc: 0,
+        amplitude: 0.0,
+    };
+
+    let mut base_octave: i32 = 0;
+
+    let phase_per_hz: f32 = (1u64 << 32) as f32 / (SAMPLE_RATE.0 as f32);
+    let mut base_phase_inc = [0u32; PENTA_LEN];
+    for i in 0..PENTA_LEN {
+        base_phase_inc[i] = (ROOT_FREQ * PENTATONIC[i] * phase_per_hz) as u32;
+    }
+    let mut switch_osc;
+
     loop {
+        switch_osc = false;
         if let Some(new_input) = INPUT_SIGNAL.try_take() {
             input = new_input;
+            switch_osc = input.btn_pressed;
         }
 
-        let peak = (2000.0 * input.volpot) as i16;
-        for frame in 0..SAMPLES_PER_BLOCK {
-            let sample = if frame < SAMPLES_PER_BLOCK / 2 {
-                peak
-            } else {
-                -peak
-            };
-            let word = sample as u16 as u32;
-            test_tone[frame * 2] = word;
-            test_tone[frame * 2 + 1] = word;
+        let ang = input.contpot;
+        let delta = ang - prev_ang;
+        if delta < -0.5 {
+            base_octave = base_octave + OCTAVES_PER_CYCLE;
+        } else if delta > 0.5 {
+            base_octave = base_octave - OCTAVES_PER_CYCLE;
         }
+        prev_ang = ang;
+
+        let step = ang.clamp(0.0, 1.0) * (OCTAVES_PER_CYCLE * PENTA_LEN as i32) as f32;
+        let degree = (step as usize) % PENTA_LEN;
+        let octave = base_octave + (step as i32) / PENTA_LEN as i32;
+
+        let base = base_phase_inc[degree];
+        phase_inc = if octave >= 0 { base << octave } else { base >> (-octave) };
+        if switch_osc {
+            osc.wave = next_wave(osc.wave);
+        }
+
+        osc.phase_inc = phase_inc;
+        osc.amplitude = input.volpot * i16::MAX as f32;
+
+        fill(&mut test_tone, &mut osc);
 
         sai.write(&test_tone).await.unwrap();
     }
@@ -352,45 +290,3 @@ async fn input_task(
     }
 }
 
-// #[interrupt]
-// fn DMA1_STR0() {
-//     static mut TRANSFER: Option<I2sDma> = None;
-//     static mut LAST_FILLED: Option<dma::CurrentBuffer> = None;
-//
-//     let mut osc = cortex_m::interrupt::free(|cs| *AUDIO.borrow(cs).borrow());
-//     let transfer = TRANSFER.get_or_insert_with(|| {
-//         cortex_m::interrupt::free(|cs| {
-//             AUDIO_TRANSFER
-//                 .borrow(cs)
-//                 .replace(None)
-//                 .unwrap_or_else(|| panic!("DMA IRQ ran before its transfer was installed"))
-//         })
-//     });
-//     let filled = unsafe {
-//         transfer.next_transfer_with(|buf, current, remaining| {
-//             let _ = remaining;
-//             fill(buf, &mut osc);
-//             (buf, current)
-//         })
-//     };
-//
-//     match filled {
-//         Ok(half) => {
-//             if *LAST_FILLED == Some(half) {
-//                 panic!("DMA completed the same double buffer twice in a row");
-//             }
-//             *LAST_FILLED = Some(half);
-//         }
-//         Err(dma::DMAError::NotReady) => {
-//             panic!("DMA IRQ without a completed transfer");
-//         }
-//         Err(dma::DMAError::SmallBuffer) => {
-//             panic!("DMA replacement buffer length changed");
-//         }
-//         Err(dma::DMAError::Overflow) => {
-//             panic!("DMA overran the audio ISR");
-//         }
-//     }
-//
-//     cortex_m::interrupt::free(|cs| AUDIO.borrow(cs).borrow_mut().phase = osc.phase);
-// }

@@ -3,13 +3,15 @@
 
 use cortex_m::asm;
 use cortex_m_rt::entry;
-use embassy_stm32::pac::mdma::vals::Trgm::BLOCK;
-use embassy_stm32::{self, bind_interrupts, gpio, dma, sai, peripherals};
-use embassy_stm32::gpio::{Level, Output, Speed};
+use embassy_stm32::adc::{Adc, SampleTime};
+use embassy_stm32::{self, Peri, adc, bind_interrupts, dma, gpio, peripherals, sai};
+use embassy_stm32::gpio::{AnyPin, Input, Level, Output, Pull, Speed};
 use embassy_stm32::time::{Hertz};
 use embassy_stm32::rcc;
 use embassy_executor::{Spawner};
-use embassy_time::{self, Timer};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_time::{self, Duration, Ticker, Timer};
+use embassy_sync::{signal::Signal};
 use cortex_m::interrupt::Mutex;
 use core::cell::RefCell;
 use micromath::F32Ext;
@@ -23,19 +25,22 @@ mod font;
 mod panic;
 mod util;
 
+const ADC_RANGE: i32 = u16::MAX as i32 + 1;
+const ADC_MIDPT: u16 = 1 << 15;
+const ANGLE_MAX: i32 = ADC_RANGE * 2;
+
+// don't change this unless you change pll3 as well
 const SAMPLE_RATE: Hertz = Hertz::khz(48);
 const SAMPLES_PER_BLOCK: usize = 64;
 const BLOCK_WORDS: usize = SAMPLES_PER_BLOCK * 2;
-const DEBOUNCE_SAMPLES: u32 = 441;
 const ROOT_FREQ: f32 = 261.626; // C4
 
 // equal temperament
-// const PENTATONIC: [f32; 5] = [1.0, 1.122462, 1.259921, 1.498307, 1.681793];
+const PENTATONIC: [f32; 5] = [1.0, 1.122462, 1.259921, 1.498307, 1.681793];
 
 // just intonation
-const PENTATONIC: [f32; 5] = [1.0, 9.0 / 8.0, 5.0 / 4.0, 3.0 / 2.0, 5.0 / 3.0];
+// const PENTATONIC: [f32; 5] = [1.0, 9.0 / 8.0, 5.0 / 4.0, 3.0 / 2.0, 5.0 / 3.0];
 const PENTA_LEN: usize = PENTATONIC.len();
-const ANGLE_MAX: i32 = 8192;
 const OCTAVES_PER_CYCLE: i32 = 2;
 const OCTAVE_MIN: i32 = -10;
 const OCTAVE_MAX: i32 = 10;
@@ -48,43 +53,36 @@ struct Osc {
     amplitude: f32
 }
 
-static AUDIO: Mutex<RefCell<Osc>> = Mutex::new(RefCell::new(Osc {
-    wave_idx: 0,
-    phase: 0,
-    phase_inc: 42_852_281, // A440
-    amplitude: 0.0,
-}));
+type SaiDriver = sai::Sai<'static, peripherals::SAI2, u32>;
 
 // combine phase shifted tri waves from continuous pot
 fn angle(val1: u16, val2: u16) -> i32 {
-    (if val1 < 2048 {
-        val2 as i32 - 4095
+    if val1 < ADC_MIDPT {
+        i32::from(val2)
     } else {
-        4096 - val2 as i32
-    }) + 4096
+        ANGLE_MAX - 1 - i32::from(val2)
+    }
 }
 
-fn pot_vol_to_linear(val: f32) -> f32 {
+fn db_vol_to_linear(val: f32 /* 0 - 1 */) -> f32 {
     if val == 0.0 {
         return 0.0;
     }
-    let norm = val / 4096.0;
-    let db = -60.0 + (norm * 60.0);
+    let db = -60.0 + (val * 60.0);
     10.0f32.powf(db / 20.0)
 }
-
-// type I2sDma = dma::Transfer<
-//     dma::dma::Stream0<pac::DMA1>,
-//     sai::dma::ChannelB<pac::SAI2>,
-//     dma::MemoryToPeripheral,
-//     &'static mut [u32; BLOCK_WORDS],
-//     dma::DBTransfer
-// >;
-// static AUDIO_TRANSFER: Mutex<RefCell<Option<I2sDma>>> = Mutex::new(RefCell::new(None));
 
 bind_interrupts!(struct Irqs {
     DMA1_STREAM0 => dma::InterruptHandler<peripherals::DMA1_CH0>;
 });
+
+struct InputState {
+    contpot: f32,
+    volpot: f32,
+    btn_pressed: bool,
+}
+
+static INPUT_SIGNAL: Signal<CriticalSectionRawMutex, InputState> = Signal::new();
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -110,7 +108,9 @@ async fn main(_spawner: Spawner) {
 
     let tx_buf = cortex_m::singleton!(: [u32; BLOCK_WORDS] = [0; BLOCK_WORDS] ).unwrap();
 
-    let mut sai_tx = sai::Sai::new_asynchronous(
+    // amp: SAI2 peripheral
+    // amp din: pa0, ws/lrclk: pg9, bclk: pa2
+    let sai_tx = sai::Sai::new_asynchronous(
         sai2_b,
         p.PA2,
         p.PA0,
@@ -120,57 +120,22 @@ async fn main(_spawner: Spawner) {
         Irqs,
         sai2_tx_cfg);
 
-    let mut test_tone = [0u32; BLOCK_WORDS];
+    let adc1 = adc::Adc::new_with_config(p.ADC1, adc::AdcConfig {
+        resolution: Some(adc::Resolution::BITS16),
+        averaging: Some(adc::Averaging::Samples4),
+    });
 
-    for frame in 0..SAMPLES_PER_BLOCK {
-        let sample: i16 = if frame < SAMPLES_PER_BLOCK / 2 { 2000 } else {-2000};
-        let word = sample as u16 as u32;
-        test_tone[frame * 2] = word;
-        test_tone[frame * 2 + 1] = word;
-    }
+    _spawner.spawn(audio_task(sai_tx).unwrap());
+    _spawner.spawn(input_task(adc1, p.PC0, p.PA3, p.PB1, p.PB14).unwrap());
 
     loop {
-        sai_tx.write(&test_tone).await;
-        // led.set_high();
-        // Timer::after_millis(1000).await;
-        //
-        // led.set_low();
-        // Timer::after_millis(1000).await;
+        led.set_high();
+        Timer::after_millis(1000).await;
+
+        led.set_low();
+        Timer::after_millis(1000).await;
     }
     
-    // let audio_buf_1 = cortex_m::singleton!(: [u32; BLOCK_WORDS] = [0; BLOCK_WORDS]).unwrap();
-    // let audio_buf_2 = cortex_m::singleton!(: [u32; BLOCK_WORDS] = [0; BLOCK_WORDS]).unwrap();
-    // for b in audio_buf_1.iter_mut() {
-    //     *b = 0;
-    // }
-    //
-    // let mut cp = cortex_m::Peripherals::take().unwrap();
-    // let dp = pac::Peripherals::take().unwrap();
-    //
-    // let pwr = dp.PWR.constrain().vos0(&dp.SYSCFG);
-    // let pwrcfg = pwr.freeze();
-    //
-    // let mut rcc = dp.RCC.constrain();
-    // let mut ccdr = rcc
-    //     .use_hse(16.MHz())
-    //     .pll1_strategy(PllConfigStrategy::Iterative)
-    //     .pll1_q_ck(96.MHz())
-    //     .pll3_strategy(PllConfigStrategy::Iterative)
-    //     .pll3_p_ck(PLL3_P_HZ)
-    //     .sys_ck(480.MHz())
-    //     .freeze(pwrcfg, &dp.SYSCFG);
-    //
-    //
-    // panic::publish_sys_hz(ccdr.clocks.sys_ck().raw());
-    // assert!(ccdr.clocks.sys_ck().raw() == 480_000_000);
-    // ccdr.peripheral.kernel_adc_clk_mux(rcc::rec::AdcClkSel::Per);
-    // let sai2_rec = ccdr.peripheral.kernel_sai23_clk_mux(rcc::rec::Sai23ClkSel::Pll3P);
-    //
-    // let gpioa = dp.GPIOA.split(ccdr.peripheral.GPIOA);
-    // let gpiob = dp.GPIOB.split(ccdr.peripheral.GPIOB);
-    // let gpioc = dp.GPIOC.split(ccdr.peripheral.GPIOC);
-    // let gpiog = dp.GPIOG.split(ccdr.peripheral.GPIOG);
-    //
     // // sharp cs: pg10, sck: pg11, mosi: pb5
     // let sharp_freq: time::Hertz = 12.MHz();
     // let sharp_driver = cortex_m::singleton!(: SharpDisplayDriver = SharpDisplayDriver::new()).unwrap();
@@ -193,60 +158,6 @@ async fn main(_spawner: Spawner) {
     // let mut sharp_spi = sharp_spi.disable();
     // sharp_spi.inner_mut().cfg2.modify(|_, w| w.lsbfrst().lsbfirst());
     // let mut sharp_spi = sharp_spi.enable();
-    //
-    //
-    // // amp: SAI2 peripheral
-    // // amp din: pa0, ws/lrclk: pg9, bclk: pa2
-    // let i2s2_pins = (
-    //     gpioa.pa1.into_alternate(), // mclk not used
-    //     gpioa.pa2.into_alternate(), // sck
-    //     gpiog.pg9.into_alternate(), // ws
-    //     gpioa.pa0.into_alternate(), // data in
-    //     None::<gpio::PD11<gpio::AF10>> // data in 2 (not used)
-    // );
-    // let i2s2_tx_config = sai::I2SChanConfig::new(sai::I2SDir::Tx)
-    //     .set_clock_strobe(sai::I2SClockStrobe::Falling)
-    //     .set_protocol(sai::I2SProtocol::MSB)
-    //     .set_frame_sync_before(true);
-    // let mut sai2 = dp.SAI2.i2s_ch_b(
-    //     i2s2_pins,
-    //     SAMPLE_RATE,
-    //     sai::I2SDataSize::BITS_16,
-    //     ccdr.peripheral.SAI2,
-    //     &ccdr.clocks,
-    //     sai::I2sUsers::new(i2s2_tx_config));
-    //
-    // let dma1_stream0 = dma::dma::StreamsTuple::new(dp.DMA1, ccdr.peripheral.DMA1).0;
-    // let dma_cfg = dma::dma::DmaConfig::default()
-    //     .priority(dma::config::Priority::High)
-    //     .memory_increment(true)
-    //     .peripheral_increment(false)
-    //     .double_buffer(true)
-    //     .transfer_complete_interrupt(true)
-    //     .fifo_enable(false);
-    // let mut the_dma: dma::Transfer<_, _, dma::MemoryToPeripheral, _, _> = dma::Transfer::init(
-    //     dma1_stream0,
-    //     unsafe { pac::Peripherals::steal().SAI2.dma_ch_b() },
-    //     audio_buf_1,
-    //     Some(audio_buf_2),
-    //     dma_cfg);
-    // cortex_m::interrupt::free(|cs| {
-    //     let mut osc = AUDIO.borrow(cs).borrow_mut();
-    //     osc.amplitude = 8000.0;
-    // });
-    //
-    // the_dma.start(|f| {
-    // });
-    //
-    // cortex_m::interrupt::free(|cs| *AUDIO_TRANSFER.borrow(cs).borrow_mut() = Some(the_dma));
-    //
-    // sai2.enable_dma(sai::SaiChannel::ChannelB);
-    // sai2.enable();
-    //
-    // unsafe {
-    //     cp.NVIC.set_priority(DMA1_STR0, 0<<4);
-    //     NVIC::unmask(DMA1_STR0);
-    // }
     //
     // // continuous pot pc0 / pa3
     // let mut pot1 = gpioc.pc0.into_analog();
@@ -370,8 +281,74 @@ fn fill(buf: &mut [u32; BLOCK_WORDS], osc: &mut Osc) {
         let b = table[(idx + 1) & (TABLE_SIZE - 1)];
         let s = ((a + (b - a) * frac) * osc.amplitude) as i16;
         osc.phase = osc.phase.wrapping_add(osc.phase_inc);
-        buf[i * 2 + 0] = s as u32;
-        buf[i * 2 + 1] = s as u32;
+        let word = s as u16 as u32;
+        buf[i * 2 + 0] = word;
+        buf[i * 2 + 1] = word;
+    }
+}
+
+#[embassy_executor::task]
+async fn audio_task(mut sai: SaiDriver) {
+    let mut test_tone = [0u32; BLOCK_WORDS];
+    let mut input = InputState {
+        contpot: 0.0,
+        volpot: 0.0,
+        btn_pressed: false
+    };
+
+    loop {
+        if let Some(new_input) = INPUT_SIGNAL.try_take() {
+            input = new_input;
+        }
+
+        let peak = (2000.0 * input.volpot) as i16;
+        for frame in 0..SAMPLES_PER_BLOCK {
+            let sample = if frame < SAMPLES_PER_BLOCK / 2 {
+                peak
+            } else {
+                -peak
+            };
+            let word = sample as u16 as u32;
+            test_tone[frame * 2] = word;
+            test_tone[frame * 2 + 1] = word;
+        }
+
+        sai.write(&test_tone).await.unwrap();
+    }
+}
+
+#[embassy_executor::task]
+async fn input_task(
+    mut adc: Adc<'static, peripherals::ADC1>,
+    mut pot1: Peri<'static, peripherals::PC0>,
+    mut pot2: Peri<'static, peripherals::PA3>,
+    mut volpot: Peri<'static, peripherals::PB1>,
+    btn: Peri<'static, peripherals::PB14>) {
+    let mut ticker = Ticker::every(Duration::from_millis(10));
+
+    let mut control: f32;
+    let mut vol: f32;
+    let btn_read = Input::new(btn, Pull::Up);
+    let mut last_btn_state = btn_read.is_low();
+
+    loop {
+        ticker.next().await;
+
+        let re = adc.blocking_read(&mut pot1, SampleTime::CYCLES387_5);
+        let im = adc.blocking_read(&mut pot2, SampleTime::CYCLES387_5);
+        let ang = angle(re, im);
+        control = ang as f32 / (ANGLE_MAX - 1) as f32;
+        vol = adc.blocking_read(&mut volpot, SampleTime::CYCLES387_5) as f32 / (u16::MAX as f32);
+        vol = db_vol_to_linear(vol);
+        let btn_state = btn_read.is_low();
+
+        INPUT_SIGNAL.signal(InputState {
+            contpot: control,
+            volpot: vol,
+            btn_pressed: btn_state && last_btn_state != btn_state,
+        });
+
+        last_btn_state = btn_state;
     }
 }
 

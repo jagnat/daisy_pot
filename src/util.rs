@@ -25,6 +25,10 @@ pub fn config_plls(cfg: &mut Config) {
     cfg.rcc.apb3_pre = rcc::APBPrescaler::DIV2;
     cfg.rcc.apb4_pre = rcc::APBPrescaler::DIV2;
 
+    // use external crystal for adc
+    cfg.rcc.mux.persel = pac::rcc::vals::Persel::HSE;
+    cfg.rcc.mux.adcsel = pac::rcc::vals::Adcsel::PER;
+
     // use pll 3 for sai2
     cfg.rcc.mux.sai23sel = pac::rcc::vals::Saisel::PLL3_P;
     // for audio at 48khz we need a smaller multiple of it for SAI

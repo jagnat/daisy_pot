@@ -9,7 +9,7 @@ pub fn config_plls(cfg: &mut Config) {
         prediv: rcc::PllPreDiv::DIV4, // 16 mhz / 4 = 4 mhz
         mul: rcc::PllMul::MUL240, // 4 * 240 = 960 mhz
         divp: Some(rcc::PllDiv::DIV2), // 960 / 2 = 480 mhz (system clock)
-        divq: None, 
+        divq: Some(rcc::PllDiv::DIV40),  // 960 / 40 = 24 mhz for spi
         divr: None,
     });
     cfg.rcc.sys = rcc::Sysclk::PLL1_P;
@@ -28,6 +28,9 @@ pub fn config_plls(cfg: &mut Config) {
     // use external crystal for adc
     cfg.rcc.mux.persel = pac::rcc::vals::Persel::HSE;
     cfg.rcc.mux.adcsel = pac::rcc::vals::Adcsel::PER;
+
+    // use pll1 Q for spi
+    cfg.rcc.mux.spi123sel = pac::rcc::vals::Saisel::PLL1_Q;
 
     // use pll 3 for sai2
     cfg.rcc.mux.sai23sel = pac::rcc::vals::Saisel::PLL3_P;

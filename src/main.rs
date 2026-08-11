@@ -3,8 +3,9 @@
 
 use cortex_m::asm;
 use cortex_m_rt::entry;
+use embassy_futures::yield_now;
 use embassy_stm32::adc::{Adc, SampleTime};
-use embassy_stm32::{self, Peri, adc, bind_interrupts, dma, gpio, peripherals, sai};
+use embassy_stm32::{self, Peri, adc, bind_interrupts, dma, gpio, pac, peripherals, sai, spi, time};
 use embassy_stm32::gpio::{AnyPin, Input, Level, Output, Pull, Speed};
 use embassy_stm32::time::{Hertz};
 use embassy_stm32::rcc;
@@ -74,6 +75,7 @@ fn db_vol_to_linear(val: f32 /* 0 - 1 */) -> f32 {
 
 bind_interrupts!(struct Irqs {
     DMA1_STREAM0 => dma::InterruptHandler<peripherals::DMA1_CH0>;
+    DMA2_STREAM0 => dma::InterruptHandler<peripherals::DMA2_CH0>;
 });
 
 struct InputState {
@@ -125,56 +127,25 @@ async fn main(_spawner: Spawner) {
         averaging: Some(adc::Averaging::Samples4),
     });
 
+    let mut sharp_cs = gpio::Flex::new(p.PG10);
+    sharp_cs.set_as_af_unchecked(5, gpio::AfType::output(gpio::OutputType::PushPull, gpio::Speed::High));
+    let mut sharp_cfg = spi::Config::default();
+    sharp_cfg.frequency = time::mhz(12);
+    sharp_cfg.bit_order = spi::BitOrder::LsbFirst;
+    let mut sharp_spi = spi::Spi::new_txonly(p.SPI1, p.PG11, p.PB5, p.DMA2_CH0, Irqs, sharp_cfg);
+
+    // manual register hacks to turn on hardware cs (ss)
+    pac::SPI1.cr1().modify(|w| w.set_spe(false));
+    pac::SPI1.cfg2().modify(|w| w.set_ssm(false));
+    pac::SPI1.cr1().modify(|w| w.set_spe(true));
+
     _spawner.spawn(audio_task(sai_tx).unwrap());
     _spawner.spawn(input_task(adc1, p.PC0, p.PA3, p.PB1, p.PB14).unwrap());
+    _spawner.spawn(display_task(sharp_spi).unwrap());
 
     loop {
         core::future::pending::<()>().await;
     }
-    
-    // // sharp cs: pg10, sck: pg11, mosi: pb5
-    // let sharp_freq: time::Hertz = 12.MHz();
-    // let sharp_driver = cortex_m::singleton!(: SharpDisplayDriver = SharpDisplayDriver::new()).unwrap();
-    // let sharp_sck = gpiog.pg11.into_alternate().speed(gpio::Speed::VeryHigh);
-    // let sharp_mosi = gpiob.pb5.into_alternate().speed(gpio::Speed::VeryHigh);
-    // let sharp_mode = spi::Mode {
-    //     polarity: spi::Polarity::IdleLow,
-    //     phase: spi::Phase::CaptureOnFirstTransition,
-    // };
-    // let sharp_hcs = gpiog.pg10.into_alternate();
-    // let sharp_cfg = spi::Config::new(sharp_mode)
-    //     .inter_word_delay(0.0)
-    //     .hardware_cs(spi::HardwareCS {
-    //         mode: spi::HardwareCSMode::FrameTransaction,
-    //         assertion_delay: 0.000_003, // 3 micro-secs
-    //         polarity: spi::Polarity::IdleLow,
-    //     });
-    // let sharp_spi: spi::Spi<_, _, u8> = dp.SPI1.spi((sharp_sck, spi::NoMiso, sharp_mosi, sharp_hcs), sharp_cfg, sharp_freq, ccdr.peripheral.SPI1, &ccdr.clocks);
-    // // hack to set lsb-first since there isn't an easy api for it
-    // let mut sharp_spi = sharp_spi.disable();
-    // sharp_spi.inner_mut().cfg2.modify(|_, w| w.lsbfrst().lsbfirst());
-    // let mut sharp_spi = sharp_spi.enable();
-    //
-    // let mut vcom_tim = dp.TIM2.timer(1.Hz(), ccdr.peripheral.TIM2, &ccdr.clocks);
-    //
-    // let mut col: bool = false;
-    //
-    // let mut amplitude: f32;
-    // loop {
-    //     if vcom_tim.wait().is_ok() {
-    //         for i in 0..400 {
-    //             for j in 0..240 {
-    //                 let add = (j / 24) % 2;
-    //                 let set = ((i / 16) + add) % 2 == 0;
-    //                 sharp_driver.set_pixel(i, j, set == col);
-    //             }
-    //         }
-    //         col = !col;
-    //         sharp_driver.swap_vcom();
-    //         while let Some(b) = sharp_driver.next_dirty_bytes() {
-    //             sharp_spi.write(b).unwrap();
-    //         }
-    //     }
 }
 
 fn fill(buf: &mut [u32; BLOCK_WORDS], osc: &mut Osc) {
@@ -251,7 +222,8 @@ async fn audio_task(mut sai: SaiDriver) {
 
         fill(&mut test_tone, &mut osc);
 
-        sai.write(&test_tone).await.unwrap();
+        // todo: handle buffer underruns and display
+        sai.write(&test_tone).await;
     }
 }
 
@@ -290,3 +262,24 @@ async fn input_task(
     }
 }
 
+#[embassy_executor::task]
+async fn display_task(mut sharp_spi: spi::Spi<'static, embassy_stm32::mode::Async, spi::mode::Master>) {
+    let mut driver = SharpDisplayDriver::new();
+    let mut col: bool = false;
+    loop {
+        for j in 0..240 {
+            for i in 0..400 {
+                let add = (j / 24) % 2;
+                let set = ((i / 16) + add) % 2 == 0;
+                driver.set_pixel(i, j, set == col);
+            }
+            yield_now().await;
+        }
+        col = !col;
+        driver.swap_vcom();
+        while let Some(b) = driver.next_dirty_bytes() {
+            sharp_spi.write(b).await.unwrap();
+        }
+        Timer::after_millis(1000).await;
+    }
+}

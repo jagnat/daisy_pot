@@ -13,6 +13,7 @@ embassy-stm32 = { version = "0.6.0", features = ["stm32h750ib", "time-driver-tim
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread"], }
 embassy-time = { version = "0.5.1", features = ["tick-hz-32_768"], }
 embassy-sync = "0.8.0"
+embassy-futures = "0.1.2"
 static_cell = "2.1"
 
 # cargo build/run

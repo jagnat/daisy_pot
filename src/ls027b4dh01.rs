@@ -1,3 +1,5 @@
+use crate::font::TextTarget;
+
 
 pub const SHARP_COLS: usize = 400;
 pub const SHARP_LINE_BYTES: usize = SHARP_COLS / 8;
@@ -17,6 +19,13 @@ pub struct SharpDisplayDriver {
     dirty: [bool; SHARP_ROWS],
     current_vcom: bool,
     dirty_line_iter: Option<usize>,
+}
+
+impl TextTarget for SharpDisplayDriver {
+    fn blend_mask_row(&mut self, x: i32, y: i32, mask: &[u8], width: usize, horizontal_scale: usize, op: crate::font::MaskOp) {
+        let line = &mut self.lines[y as usize];
+        let byte_start = line.data[(x as usize) / 8];
+    }
 }
 
 impl SharpDisplayDriver {
@@ -51,6 +60,20 @@ impl SharpDisplayDriver {
             *byte &= !bit;
             self.dirty[py] = true;
         }
+    }
+
+    pub fn set_byte(&mut self, bx: usize, py: usize, b: u8) {
+    }
+
+    pub fn set_fullscreen(&mut self, b: &[u8]) {
+        assert_eq!(b.len(), SHARP_ROWS * SHARP_LINE_BYTES);
+        for y in 0..SHARP_ROWS {
+            let start = y * SHARP_LINE_BYTES;
+            let src = &b[start..start + SHARP_LINE_BYTES];
+            self.lines[y].data.copy_from_slice(src);
+        }
+        self.dirty = [true; SHARP_ROWS];
+        self.dirty_line_iter = None;
     }
 
     fn set_vcom_bit(current_vcom: bool, b: &mut u8) {

@@ -19,12 +19,18 @@ use micromath::F32Ext;
 // use pac::interrupt;
 use crate::ls027b4dh01::SharpDisplayDriver;
 use crate::luts::*;
+use crate::font::*;
+// use crate::mushroom::MUSHROOM;
 
 mod ls027b4dh01;
 mod luts;
 mod font;
+mod font_garnet_9;
 mod panic;
 mod util;
+// mod hobbit_hole;
+// mod teapot;
+mod mushroom;
 
 const ADC_RANGE: i32 = u16::MAX as i32 + 1;
 const ADC_MIDPT: u16 = 1 << 15;
@@ -37,10 +43,10 @@ const BLOCK_WORDS: usize = SAMPLES_PER_BLOCK * 2;
 const ROOT_FREQ: f32 = 261.626; // C4
 
 // equal temperament
-const PENTATONIC: [f32; 5] = [1.0, 1.122462, 1.259921, 1.498307, 1.681793];
+// const PENTATONIC: [f32; 5] = [1.0, 1.122462, 1.259921, 1.498307, 1.681793];
 
 // just intonation
-// const PENTATONIC: [f32; 5] = [1.0, 9.0 / 8.0, 5.0 / 4.0, 3.0 / 2.0, 5.0 / 3.0];
+const PENTATONIC: [f32; 5] = [1.0, 9.0 / 8.0, 5.0 / 4.0, 3.0 / 2.0, 5.0 / 3.0];
 const PENTA_LEN: usize = PENTATONIC.len();
 const OCTAVES_PER_CYCLE: i32 = 2;
 const OCTAVE_MIN: i32 = -10;
@@ -265,20 +271,19 @@ async fn input_task(
 #[embassy_executor::task]
 async fn display_task(mut sharp_spi: spi::Spi<'static, embassy_stm32::mode::Async, spi::mode::Master>) {
     let mut driver = SharpDisplayDriver::new();
-    let mut col: bool = false;
+    // driver.set_fullscreen(&MUSHROOM);
+    while let Some(b) = driver.next_dirty_bytes() {
+        sharp_spi.write(b).await.unwrap();
+    }
     loop {
-        for j in 0..240 {
-            for i in 0..400 {
-                let add = (j / 24) % 2;
-                let set = ((i / 16) + add) % 2 == 0;
-                driver.set_pixel(i, j, set == col);
-            }
-            yield_now().await;
-        }
-        col = !col;
         driver.swap_vcom();
+        let mut wrote = false;
         while let Some(b) = driver.next_dirty_bytes() {
-            sharp_spi.write(b).await.unwrap();
+            sharp_spi.write(b).await;
+            wrote = true;
+        }
+        if !wrote {
+            sharp_spi.write(&driver.vcom_cmd()).await;
         }
         Timer::after_millis(1000).await;
     }

@@ -20,7 +20,6 @@ use micromath::F32Ext;
 use crate::ls027b4dh01::SharpDisplayDriver;
 use crate::luts::*;
 use crate::font::*;
-// use crate::mushroom::MUSHROOM;
 
 mod ls027b4dh01;
 mod luts;
@@ -29,8 +28,8 @@ mod font_garnet_9;
 mod panic;
 mod util;
 // mod hobbit_hole;
-// mod teapot;
-mod mushroom;
+mod teapot;
+// mod mushroom;
 
 const ADC_RANGE: i32 = u16::MAX as i32 + 1;
 const ADC_MIDPT: u16 = 1 << 15;
@@ -60,7 +59,7 @@ struct Osc {
     amplitude: f32,
 }
 
-type SaiDriver = sai::Sai<'static, peripherals::SAI2, u32>;
+type SaiDriver = sai::Sai<'static, peripherals::SAI1, u32>;
 
 // combine phase shifted tri waves from continuous pot
 fn angle(val1: u16, val2: u16) -> i32 {
@@ -105,28 +104,38 @@ async fn main(_spawner: Spawner) {
 
     let mut led = Output::new(p.PC7, Level::High, Speed::Medium);
 
-    let (_, sai2_b) = sai::split_subblocks(p.SAI2);
+    let (sai1_a, _) = sai::split_subblocks(p.SAI1);
 
-    let mut sai2_tx_cfg = sai::Config::default();
-    sai2_tx_cfg.clock_strobe = sai::ClockStrobe::Falling;
-    sai2_tx_cfg.bit_order = sai::BitOrder::MsbFirst;
-    sai2_tx_cfg.nodiv = true;
-    // 24.576 mhz / 16 = 1.536mhz, which is 32 bits per 48khz
-    sai2_tx_cfg.master_clock_divider = sai::MasterClockDivider::DIV16;
+    // seed 3 has TAC5242 on SAI1 with 32 bit MSB-leading samples in stereo
+    let mut sai1_tx_cfg = sai::Config::default();
+    sai1_tx_cfg.mode = sai::Mode::Master;
+    sai1_tx_cfg.tx_rx = sai::TxRx::Transmitter;
+    sai1_tx_cfg.sync_output = true;
+    sai1_tx_cfg.clock_strobe = sai::ClockStrobe::Falling;
+    // 49.152 MHz / 4 = 12.288 MHz ( = 256 * 48kHz )
+    sai1_tx_cfg.master_clock_divider = sai::MasterClockDivider::DIV4; 
+    sai1_tx_cfg.stereo_mono = sai::StereoMono::Stereo;
+    sai1_tx_cfg.data_size = sai::DataSize::Data32;
+    sai1_tx_cfg.bit_order = sai::BitOrder::MsbFirst;
+    sai1_tx_cfg.frame_sync_polarity = sai::FrameSyncPolarity::ActiveHigh;
+    sai1_tx_cfg.frame_sync_offset = sai::FrameSyncOffset::OnFirstBit;
+    sai1_tx_cfg.frame_length = 64;
+    sai1_tx_cfg.frame_sync_active_level_length = sai::word::U7(32);
+    sai1_tx_cfg.fifo_threshold = sai::FifoThreshold::Quarter;
 
     let tx_buf = cortex_m::singleton!(: [u32; BLOCK_WORDS] = [0; BLOCK_WORDS] ).unwrap();
 
-    // amp: SAI2 peripheral
-    // amp din: pa0, ws/lrclk: pg9, bclk: pa2
-    let sai_tx = sai::Sai::new_asynchronous(
-        sai2_b,
-        p.PA2,
-        p.PA0,
-        p.PG9,
+    // internal SAI1 pins wired to TAC5242, and output goes to physical 18 and 19 (L/R)
+    let sai_tx = sai::Sai::new_asynchronous_with_mclk(
+        sai1_a,
+        p.PE5,
+        p.PE6,
+        p.PE4,
+        p.PE2,
         p.DMA1_CH0,
         tx_buf,
         Irqs,
-        sai2_tx_cfg);
+        sai1_tx_cfg);
 
     let adc1 = adc::Adc::new_with_config(p.ADC1, adc::AdcConfig {
         resolution: Some(adc::Resolution::BITS16),
@@ -163,7 +172,8 @@ fn fill(buf: &mut [u32; BLOCK_WORDS], osc: &mut Osc) {
         let b = table[(idx + 1) & (TABLE_SIZE - 1)];
         let s = ((a + (b - a) * frac) * osc.amplitude) as i16;
         osc.phase = osc.phase.wrapping_add(osc.phase_inc);
-        let word = s as u16 as u32;
+        // TODO: We're using only 16 bit generated samples in MSBs of 32 bit codec sample. Fix later?
+        let word = ((s as i32) << 16) as u32;
         buf[i * 2 + 0] = word;
         buf[i * 2 + 1] = word;
     }
@@ -196,6 +206,9 @@ async fn audio_task(mut sai: SaiDriver) {
         base_phase_inc[i] = (ROOT_FREQ * PENTATONIC[i] * phase_per_hz) as u32;
     }
     let mut switch_osc;
+
+    // stabilize for a bit before we drive audio
+    Timer::after_millis(2).await;
 
     loop {
         switch_osc = false;
@@ -271,10 +284,15 @@ async fn input_task(
 #[embassy_executor::task]
 async fn display_task(mut sharp_spi: spi::Spi<'static, embassy_stm32::mode::Async, spi::mode::Master>) {
     let mut driver = SharpDisplayDriver::new();
-    // driver.set_fullscreen(&MUSHROOM);
+
+    // clear display in case we were to never mark any lines as dirty
+    sharp_spi.write(&driver.all_clear_cmd()).await.unwrap();
+
+    driver.set_fullscreen(&crate::teapot::TEAPOT);
     while let Some(b) = driver.next_dirty_bytes() {
         sharp_spi.write(b).await.unwrap();
     }
+
     loop {
         driver.swap_vcom();
         let mut wrote = false;

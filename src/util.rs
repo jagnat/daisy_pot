@@ -32,16 +32,14 @@ pub fn config_plls(cfg: &mut Config) {
     // use pll1 Q for spi
     cfg.rcc.mux.spi123sel = pac::rcc::vals::Saisel::PLL1_Q;
 
-    // use pll 3 for sai2
-    cfg.rcc.mux.sai23sel = pac::rcc::vals::Saisel::PLL3_P;
-    // for audio at 48khz we need a smaller multiple of it for SAI
-    // so we use pll3
-    // 16mhz / 5 * 192  / 25 = 24.576 mhz = 512 * 48 khz
+    // seed3's TAC5242 codec is clocked by SAI1, give it 49.152 MHz so
+    // DIV4 gives us 12.288 MHz clock (256 * 48 kHz)
+    cfg.rcc.mux.sai1sel = pac::rcc::vals::Saisel::PLL3_P;
     cfg.rcc.pll3 = Some(rcc::Pll {
         source: rcc::PllSource::HSE,
-        prediv: rcc::PllPreDiv::DIV5,
-        mul: rcc::PllMul::MUL192,
-        divp: Some(rcc::PllDiv::DIV25),
+        prediv: rcc::PllPreDiv::DIV25, // 16 MHz / 25 = 640 kHz
+        mul: rcc::PllMul::MUL384,      // 640 kHz * 384 = 245.76 MHz
+        divp: Some(rcc::PllDiv::DIV5), // 245.76 MHz / 5 = 49.152 MHz
         divq: None,
         divr: None,
     });
@@ -52,8 +50,5 @@ pub fn assert_pll(p: &Peripherals) {
     assert_eq!(clocks.sys.to_hertz(), Some(Hertz::mhz(480)));
     assert_eq!(clocks.hclk1.to_hertz(), Some(Hertz::mhz(240)));
     assert_eq!(clocks.pclk1.to_hertz(), Some(Hertz::mhz(120)));
-}
-
-pub fn config_sai2() {
 }
 

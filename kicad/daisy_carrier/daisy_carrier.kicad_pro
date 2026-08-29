@@ -60,16 +60,22 @@
           "hatch_smoothing_level": 0,
           "hatch_smoothing_value": 0.1,
           "hatch_thickness": 1.0,
-          "min_clearance": 0.5,
+          "min_clearance": 0.25,
           "min_island_area": 10.0,
           "min_thickness": 0.25,
           "pad_connection": 1,
-          "remove_islands": 0,
+          "remove_islands": 1,
           "thermal_relief_gap": 0.5,
           "thermal_relief_spoke_width": 0.5
         }
       },
-      "diff_pair_dimensions": [],
+      "diff_pair_dimensions": [
+        {
+          "gap": 0.0,
+          "via_gap": 0.0,
+          "width": 0.0
+        }
+      ],
       "drc_exclusions": [],
       "meta": {
         "version": 2
@@ -203,7 +209,9 @@
           "td_width_to_size_filter_ratio": 0.9
         }
       ],
-      "track_widths": [],
+      "track_widths": [
+        0.0
+      ],
       "tuning_pattern_settings": {
         "diff_pair_defaults": {
           "corner_radius_percentage": 80,
@@ -230,7 +238,12 @@
           "spacing": 0.6
         }
       },
-      "via_dimensions": [],
+      "via_dimensions": [
+        {
+          "diameter": 0.0,
+          "drill": 0.0
+        }
+      ],
       "zones_allow_external_fillets": false
     },
     "ipc2581": {
@@ -488,7 +501,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "daisy_test.kicad_pro",
+    "filename": "daisy_carrier.kicad_pro",
     "version": 3
   },
   "net_settings": {
@@ -522,10 +535,14 @@
   },
   "pcbnew": {
     "last_paths": {
+      "gencad": "",
       "idf": "",
       "netlist": "",
-      "plot": "",
+      "plot": "daisy_carrier_v0_gerber/",
+      "pos_files": "",
       "specctra_dsn": "",
+      "step": "",
+      "svg": "",
       "vrml": ""
     },
     "page_layout_descr_file": ""
@@ -643,18 +660,18 @@
     "subpart_id_separator": 0,
     "top_level_sheets": [
       {
-        "filename": "daisy_test.kicad_sch",
-        "name": "daisy_test",
+        "filename": "daisy_carrier.kicad_sch",
+        "name": "daisy_carrier",
         "uuid": "4b4eeca3-6092-4ecf-a589-7418f137e867"
       }
     ],
-    "used_designators": "U1,SW1-20,VR1-2",
+    "used_designators": "U1,JP1-4,SW1-20,VR1-2,R1-5,J1-8,#PWR1-37,C1-3",
     "variants": []
   },
   "sheets": [
     [
       "4b4eeca3-6092-4ecf-a589-7418f137e867",
-      "daisy_test"
+      "daisy_carrier"
     ]
   ],
   "text_variables": {},

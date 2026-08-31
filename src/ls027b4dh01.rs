@@ -1,5 +1,4 @@
-use crate::font::TextTarget;
-
+use crate::font::{MaskOp, TextTarget, blend_mask_into_row};
 
 pub const SHARP_COLS: usize = 400;
 pub const SHARP_LINE_BYTES: usize = SHARP_COLS / 8;
@@ -22,9 +21,17 @@ pub struct SharpDisplayDriver {
 }
 
 impl TextTarget for SharpDisplayDriver {
-    fn blend_mask_row(&mut self, x: i32, y: i32, mask: &[u8], width: usize, horizontal_scale: usize, op: crate::font::MaskOp) {
-        let line = &mut self.lines[y as usize];
-        let byte_start = line.data[(x as usize) / 8];
+    fn blend_mask_row(&mut self, x: i32, y: i32, mask: &[u8], width: usize, op: MaskOp) {
+        let Ok(row) = usize::try_from(y) else {
+            return;
+        };
+        if row >= SHARP_ROWS {
+            return;
+        }
+
+        if blend_mask_into_row(&mut self.lines[row].data, x, mask, width, op) {
+            self.dirty[row] = true;
+        }
     }
 }
 
@@ -62,8 +69,7 @@ impl SharpDisplayDriver {
         }
     }
 
-    pub fn set_byte(&mut self, bx: usize, py: usize, b: u8) {
-    }
+    pub fn set_byte(&mut self, bx: usize, py: usize, b: u8) {}
 
     pub fn set_fullscreen(&mut self, b: &[u8]) {
         assert_eq!(b.len(), SHARP_ROWS * SHARP_LINE_BYTES);
@@ -137,5 +143,3 @@ impl SharpDisplayDriver {
         ret
     }
 }
-
-

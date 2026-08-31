@@ -25,6 +25,12 @@ mod ls027b4dh01;
 mod luts;
 mod font;
 mod font_garnet_9;
+mod font_hp_100lx_10x11;
+mod font_ibm_vga_8x16;
+mod font_ibm_xga_ai_12x20;
+mod font_ibm_xga_ai_12x23;
+mod font_toshiba_sat_9x16;
+mod font_zenith;
 mod panic;
 mod util;
 // mod hobbit_hole;
@@ -288,7 +294,19 @@ async fn display_task(mut sharp_spi: spi::Spi<'static, embassy_stm32::mode::Asyn
     // clear display in case we were to never mark any lines as dirty
     sharp_spi.write(&driver.all_clear_cmd()).await.unwrap();
 
-    driver.set_fullscreen(&crate::teapot::TEAPOT);
+    // let font = &font_garnet_9::GARNET_9;
+    // let font = &font_hp_100lx_10x11::HP_100LX_10X11;
+    // let font = &font_ibm_vga_8x16::IBM_VGA_8X16;
+    let font = &font_ibm_xga_ai_12x20::IBM_XGA_AI_12X20;
+    // let font = &font_ibm_xga_ai_12x23::IBM_XGA_AI_12X23;
+    // let font = &font_toshiba_sat_9x16::TOSHIBA_SAT_9X16;
+    // let font = &font_zenith::ZENITH_Z100;
+
+    draw_text(&mut driver, 10, 10, font, "The quick brown fox jumps over", TextOptions { black: true, scale: 1 });
+    draw_text(&mut driver, 10, 20, font, "the lazy dog {}[]()", TextOptions { black: true, scale: 1 });
+
+    // driver.set_fullscreen(&crate::teapot::TEAPOT);
+
     while let Some(b) = driver.next_dirty_bytes() {
         sharp_spi.write(b).await.unwrap();
     }

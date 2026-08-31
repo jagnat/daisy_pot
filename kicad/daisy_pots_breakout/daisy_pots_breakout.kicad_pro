@@ -524,7 +524,7 @@
     "last_paths": {
       "idf": "",
       "netlist": "",
-      "plot": "",
+      "plot": "daisy_pots_breakout_gerbers/",
       "specctra_dsn": "",
       "step": "",
       "vrml": ""

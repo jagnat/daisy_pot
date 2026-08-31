@@ -82,9 +82,9 @@
 			(subtractmaskfromsilk no)
 			(outputformat 1)
 			(mirror no)
-			(drillshape 1)
+			(drillshape 0)
 			(scaleselection 1)
-			(outputdirectory "")
+			(outputdirectory "daisy_buttons_breakout_1_v0_gerbers/")
 		)
 	)
 	(footprint "Button_Switch_THT:SW_SPST_Omron_B3F-50xx"
@@ -413,18 +413,10 @@
 		(path "/57e6a24d-1a85-480c-8617-71d863dd4842")
 		(sheetname "/")
 		(sheetfile "daisy_buttons_breakout_1.kicad_sch")
-		(units
-			(unit
-				(name "A")
-				(pins "1" "3" "5" "7" "9" "11" "13" "15" "2" "4" "6" "8" "10" "12" "14"
-					"16"
-				)
-			)
-		)
 		(attr through_hole)
 		(duplicate_pad_numbers_are_jumpers no)
 		(fp_line
-			(start -12.63 19.11)
+			(start -10 19.11)
 			(end -4.000001 19.11)
 			(stroke
 				(width 0.12)
@@ -474,7 +466,7 @@
 			(uuid "5fb0d33b-d77b-44a8-80f8-5f4202bb86c5")
 		)
 		(fp_line
-			(start -12.630001 16.51)
+			(start -10 16.51)
 			(end -4 16.51)
 			(stroke
 				(width 0.12)
@@ -524,7 +516,7 @@
 			(uuid "ec494e00-8156-41cd-8698-1ad42e5989eb")
 		)
 		(fp_line
-			(start -12.63 13.97)
+			(start -10 13.97)
 			(end -4 13.97)
 			(stroke
 				(width 0.12)
@@ -574,7 +566,7 @@
 			(uuid "c587ac32-766c-474e-90ea-1a976e62a9d4")
 		)
 		(fp_line
-			(start -12.63 11.43)
+			(start -10 11.43)
 			(end -4.000001 11.43)
 			(stroke
 				(width 0.12)
@@ -624,7 +616,7 @@
 			(uuid "8b213941-f27f-4e74-8710-997d3088bcd9")
 		)
 		(fp_line
-			(start -12.63 8.89)
+			(start -10 8.89)
 			(end -4 8.89)
 			(stroke
 				(width 0.12)
@@ -674,7 +666,7 @@
 			(uuid "7d59898a-8b6f-49d7-a1e0-4712bfa65315")
 		)
 		(fp_line
-			(start -12.630001 6.35)
+			(start -10 6.35)
 			(end -4 6.35)
 			(stroke
 				(width 0.12)
@@ -724,7 +716,7 @@
 			(uuid "7762aaa5-14b0-4096-a695-be36b8f1ad4e")
 		)
 		(fp_line
-			(start -12.63 3.81)
+			(start -10 3.81)
 			(end -4 3.81)
 			(stroke
 				(width 0.12)
@@ -774,7 +766,7 @@
 			(uuid "8b08a8ec-c31d-462b-b8ce-72799d8ef6b2")
 		)
 		(fp_line
-			(start -12.63 1.27)
+			(start -10 1.27)
 			(end -4.000001 1.27)
 			(stroke
 				(width 0.12)
@@ -784,7 +776,7 @@
 			(uuid "13687a03-2332-4be6-9954-a17900dabd3d")
 		)
 		(fp_line
-			(start -12.63 1.151905)
+			(start -10 1.151905)
 			(end -4 1.151905)
 			(stroke
 				(width 0.12)
@@ -794,7 +786,7 @@
 			(uuid "c9ac5d96-bfcd-476f-ace8-e06a74baa0e7")
 		)
 		(fp_line
-			(start -12.630001 1.03381)
+			(start -10 1.03381)
 			(end -4 1.03381)
 			(stroke
 				(width 0.12)
@@ -804,7 +796,7 @@
 			(uuid "35f5eb4b-734e-49ca-9b3c-391494443622")
 		)
 		(fp_line
-			(start -12.63 0.915714)
+			(start -10 0.915714)
 			(end -4.000001 0.915714)
 			(stroke
 				(width 0.12)
@@ -814,7 +806,7 @@
 			(uuid "7cd2a5d1-1e51-4c5e-b1eb-50a97277c7a1")
 		)
 		(fp_line
-			(start -12.63 0.797619)
+			(start -10 0.797619)
 			(end -4 0.797619)
 			(stroke
 				(width 0.12)
@@ -824,7 +816,7 @@
 			(uuid "72e28f62-2c72-4ea0-852a-0f7f66d3c2be")
 		)
 		(fp_line
-			(start -12.630001 0.679524)
+			(start -10 0.679524)
 			(end -4 0.679524)
 			(stroke
 				(width 0.12)
@@ -834,7 +826,7 @@
 			(uuid "7072f69a-69bd-4488-a540-79371abcde56")
 		)
 		(fp_line
-			(start -12.63 0.561429)
+			(start -10 0.561429)
 			(end -4 0.561429)
 			(stroke
 				(width 0.12)
@@ -844,7 +836,7 @@
 			(uuid "39cf80e0-f3c4-4423-8b9b-d1131f1a775a")
 		)
 		(fp_line
-			(start -12.63 0.443333)
+			(start -10 0.443333)
 			(end -4 0.443333)
 			(stroke
 				(width 0.12)
@@ -874,7 +866,7 @@
 			(uuid "d41e7ec7-0d74-49d0-8f49-522a257c6b87")
 		)
 		(fp_line
-			(start -12.630001 0.325238)
+			(start -10 0.325238)
 			(end -4 0.325238)
 			(stroke
 				(width 0.12)
@@ -884,7 +876,7 @@
 			(uuid "189861ec-addd-45fc-afdb-6e9c83325bf9")
 		)
 		(fp_line
-			(start -12.63 0.207143)
+			(start -10 0.207143)
 			(end -4 0.207143)
 			(stroke
 				(width 0.12)
@@ -894,7 +886,7 @@
 			(uuid "a8902672-b8fb-4cbe-8be9-bd2f44d1a564")
 		)
 		(fp_line
-			(start -12.63 0.089048)
+			(start -10 0.089048)
 			(end -4.000001 0.089048)
 			(stroke
 				(width 0.12)
@@ -904,7 +896,7 @@
 			(uuid "9a94767a-4335-42f8-9ec5-e18e035c72f1")
 		)
 		(fp_line
-			(start -12.630001 -0.029048)
+			(start -10 -0.029048)
 			(end -4 -0.029048)
 			(stroke
 				(width 0.12)
@@ -914,7 +906,7 @@
 			(uuid "4fbb11d0-4858-4328-8f84-d87e233ad241")
 		)
 		(fp_line
-			(start -12.63 -0.147143)
+			(start -10 -0.147143)
 			(end -4 -0.147143)
 			(stroke
 				(width 0.12)
@@ -924,7 +916,7 @@
 			(uuid "909f6551-c437-4195-b21c-1c34a6a4980a")
 		)
 		(fp_line
-			(start -12.63 -0.265238)
+			(start -10 -0.265238)
 			(end -4.000001 -0.265238)
 			(stroke
 				(width 0.12)
@@ -954,7 +946,7 @@
 			(uuid "49305217-3e67-4604-81b6-6ab33561aa6c")
 		)
 		(fp_line
-			(start -12.63 -0.383333)
+			(start -10 -0.383332)
 			(end -4 -0.383332)
 			(stroke
 				(width 0.12)
@@ -964,7 +956,7 @@
 			(uuid "0165ddbb-78cd-4e6d-8708-189504ea8144")
 		)
 		(fp_line
-			(start -12.63 -0.501429)
+			(start -10 -0.501429)
 			(end -4 -0.501429)
 			(stroke
 				(width 0.12)
@@ -974,7 +966,7 @@
 			(uuid "f8986946-4489-4554-9f12-3be48e9b3095")
 		)
 		(fp_line
-			(start -12.63 -0.619524)
+			(start -10 -0.619524)
 			(end -4.000001 -0.619524)
 			(stroke
 				(width 0.12)
@@ -984,7 +976,7 @@
 			(uuid "4657ecdc-998a-4154-885f-30579ec8ec87")
 		)
 		(fp_line
-			(start -12.63 -0.737619)
+			(start -10 -0.737619)
 			(end -4.000001 -0.737619)
 			(stroke
 				(width 0.12)
@@ -994,7 +986,7 @@
 			(uuid "d2c3b5b5-656e-4fb9-83ba-864e86cca571")
 		)
 		(fp_line
-			(start -12.63 -0.855714)
+			(start -10 -0.855714)
 			(end -4 -0.855714)
 			(stroke
 				(width 0.12)
@@ -1004,7 +996,7 @@
 			(uuid "d4d176c8-ba91-4dfd-9281-6fac1fbd5a30")
 		)
 		(fp_line
-			(start -12.63 -0.97381)
+			(start -10 -0.97381)
 			(end -4 -0.97381)
 			(stroke
 				(width 0.12)
@@ -1014,7 +1006,7 @@
 			(uuid "779ce1ad-0480-4c5f-9702-a4816350e64f")
 		)
 		(fp_line
-			(start -12.63 -1.091905)
+			(start -10 -1.091905)
 			(end -4.000001 -1.091905)
 			(stroke
 				(width 0.12)
@@ -1024,7 +1016,7 @@
 			(uuid "21dd02da-f7c8-498a-9d53-1635b60169fd")
 		)
 		(fp_line
-			(start -12.63 -1.21)
+			(start -10 -1.21)
 			(end -4 -1.21)
 			(stroke
 				(width 0.12)
@@ -1034,8 +1026,8 @@
 			(uuid "187d3cc0-555f-44e2-a48d-a2963b6a2592")
 		)
 		(fp_line
-			(start -12.630001 -1.33)
-			(end -12.63 19.11)
+			(start -10 -1.33)
+			(end -9.999999 19.11)
 			(stroke
 				(width 0.12)
 				(type solid)
@@ -1044,7 +1036,7 @@
 			(uuid "3131dd84-d240-45be-8404-31f77955a024")
 		)
 		(fp_line
-			(start -12.630001 -1.33)
+			(start -10 -1.33)
 			(end -4 -1.33)
 			(stroke
 				(width 0.12)
@@ -1124,8 +1116,8 @@
 			(uuid "75c850e2-699c-45a2-b164-c6973b4916b2")
 		)
 		(fp_line
-			(start -12.57 19.05)
-			(end -12.57 -1.27)
+			(start -10 19.05)
+			(end -10 -1.27)
 			(stroke
 				(width 0.1)
 				(type solid)
@@ -1135,7 +1127,7 @@
 		)
 		(fp_line
 			(start -4.06 19.05)
-			(end -12.57 19.05)
+			(end -10 19.05)
 			(stroke
 				(width 0.1)
 				(type solid)
@@ -1394,7 +1386,7 @@
 			(uuid "a4b97c28-5d04-43a7-b300-9bacee6d1334")
 		)
 		(fp_line
-			(start -12.57 -1.27)
+			(start -10 -1.270001)
 			(end -5.03 -1.270001)
 			(stroke
 				(width 0.1)
@@ -3290,7 +3282,7 @@
 		(descr "Mounting Hole 3.2mm, M3, generated by kicad-footprint-generator mountinghole.py")
 		(tags "mountinghole M3")
 		(property "Reference" "REF**"
-			(at 0 -4.15 0)
+			(at 0 4.572 0)
 			(layer "F.SilkS")
 			(uuid "cd63c9ef-1d0a-4063-a2fe-a0a04b54325b")
 			(effects
@@ -5588,7 +5580,7 @@
 		(descr "Mounting Hole 3.2mm, M3, generated by kicad-footprint-generator mountinghole.py")
 		(tags "mountinghole M3")
 		(property "Reference" "REF**"
-			(at 0 -4.15 0)
+			(at 0.254 4.572 0)
 			(layer "F.SilkS")
 			(uuid "7383dc63-bfe4-4094-9fb4-ce169d95f5bc")
 			(effects
@@ -12430,7 +12422,7 @@
 		(descr "Mounting Hole 3.2mm, M3, generated by kicad-footprint-generator mountinghole.py")
 		(tags "mountinghole M3")
 		(property "Reference" "REF**"
-			(at 0 -4.15 0)
+			(at 5.842 0 0)
 			(layer "F.SilkS")
 			(uuid "45dec817-1f8d-4aaa-96f6-2f03440db0b1")
 			(effects
@@ -14224,7 +14216,7 @@
 		(descr "Mounting Hole 3.2mm, M3, generated by kicad-footprint-generator mountinghole.py")
 		(tags "mountinghole M3")
 		(property "Reference" "REF**"
-			(at 0 -4.15 0)
+			(at -5.588 0.508 0)
 			(layer "F.SilkS")
 			(uuid "1ab1f8c2-5e7c-452b-af64-b828bd890c2d")
 			(effects

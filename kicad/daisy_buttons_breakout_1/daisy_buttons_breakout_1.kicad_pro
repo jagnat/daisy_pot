@@ -524,7 +524,7 @@
     "last_paths": {
       "idf": "",
       "netlist": "",
-      "plot": "",
+      "plot": "daisy_buttons_breakout_1_v0_gerbers/",
       "specctra_dsn": "",
       "step": "",
       "vrml": ""

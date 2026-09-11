@@ -1,8 +1,7 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-# The ROM bootloader takes a raw binary, so the ELF is converted first. Under `sh -c`
-# cargo's ELF path arrives as $0, not $1. Alt setting 0 is internal flash; the other
-# alt settings are option bytes.
-runner = ["sh", "-c", "rust-objcopy -O binary $0 /tmp/daisy_pot.bin && dfu-util -a 0 -s 0x08000000:leave -D /tmp/daisy_pot.bin"]
+# Git invokes its bundled POSIX shell on Windows and /bin/sh on macOS/Linux.
+# The shell alias also forwards Cargo's appended ELF path to the script.
+runner = ["git", "-c", "alias.daisy-flash=!sh tools/flash.sh", "daisy-flash"]
 
 rustflags = [
   "-C", "linker=flip-link",

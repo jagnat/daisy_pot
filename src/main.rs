@@ -33,6 +33,7 @@ mod font_toshiba_sat_9x16;
 mod font_zenith;
 mod panic;
 mod util;
+mod music;
 // mod hobbit_hole;
 mod teapot;
 // mod mushroom;
@@ -54,8 +55,6 @@ const ROOT_FREQ: f32 = 261.626; // C4
 const PENTATONIC: [f32; 5] = [1.0, 9.0 / 8.0, 5.0 / 4.0, 3.0 / 2.0, 5.0 / 3.0];
 const PENTA_LEN: usize = PENTATONIC.len();
 const OCTAVES_PER_CYCLE: i32 = 2;
-const OCTAVE_MIN: i32 = -10;
-const OCTAVE_MAX: i32 = 10;
 
 #[derive(Copy, Clone)]
 struct Osc {
@@ -232,6 +231,8 @@ async fn audio_task(mut sai: SaiDriver) {
         }
         prev_ang = ang;
 
+        let ang: f32 = 0.5;
+
         let step = ang.clamp(0.0, 1.0) * (OCTAVES_PER_CYCLE * PENTA_LEN as i32) as f32;
         let degree = (step as usize) % PENTA_LEN;
         let octave = base_octave + (step as i32) / PENTA_LEN as i32;
@@ -243,7 +244,8 @@ async fn audio_task(mut sai: SaiDriver) {
         }
 
         osc.phase_inc = phase_inc;
-        osc.amplitude = input.volpot * i16::MAX as f32;
+        // osc.amplitude = input.volpot * i16::MAX as f32;
+        osc.amplitude = (i16::MAX / 2) as f32;
 
         fill(&mut test_tone, &mut osc);
 
@@ -302,8 +304,8 @@ async fn display_task(mut sharp_spi: spi::Spi<'static, embassy_stm32::mode::Asyn
     // let font = &font_toshiba_sat_9x16::TOSHIBA_SAT_9X16;
     // let font = &font_zenith::ZENITH_Z100;
 
-    draw_text(&mut driver, 10, 10, font, "The quick brown fox jumps over", TextOptions { black: true, scale: 1 });
-    draw_text(&mut driver, 10, 20, font, "the lazy dog {}[]()", TextOptions { black: true, scale: 1 });
+    draw_text(&mut driver, 10, 10, font, "The quick brown fox jumps over", TextOptions { black: true, scale: 4 });
+    // draw_text(&mut driver, 10, 10 + font.line_height as i32, font, "the lazy dog {}[]()", TextOptions { black: true, scale: 4 });
 
     // driver.set_fullscreen(&crate::teapot::TEAPOT);
 

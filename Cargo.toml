@@ -15,6 +15,7 @@ embassy-time = { version = "0.5.1", features = ["tick-hz-32_768"], }
 embassy-sync = "0.8.0"
 embassy-futures = "0.1.2"
 static_cell = "2.1"
+rand_xoshiro = { version = "0.8.1", default-features = false }
 
 # cargo build/run
 [profile.dev]
